@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using QuestPDF.Drawing;
 using QuestPDF.Infrastructure;
 
@@ -14,28 +15,28 @@ namespace QuestPDF.Fluent
         /// <summary>
         /// Generates the document in PDF format and returns it as a byte array.
         /// </summary>
-        public static byte[] GeneratePdf(this IDocument document)
+        public static byte[] GeneratePdf(this IDocument document, CancellationToken cancellationToken = default)
         {
             using var stream = new MemoryStream();
-            document.GeneratePdf(stream);
+            document.GeneratePdf(stream, cancellationToken);
             return stream.ToArray();
         }
         
         /// <summary>
         /// Generates the document in PDF format and saves it to the specified file path.
         /// </summary>
-        public static void GeneratePdf(this IDocument document, string filePath)
+        public static void GeneratePdf(this IDocument document, string filePath, CancellationToken cancellationToken = default)
         {
             using var stream = new FileStream(filePath, FileMode.Create);
-            document.GeneratePdf(stream);
+            document.GeneratePdf(stream, cancellationToken);
         }
 
         /// <summary>
         /// Generates the document in PDF format and outputs it to a provided stream.
         /// </summary>
-        public static void GeneratePdf(this IDocument document, Stream stream)
+        public static void GeneratePdf(this IDocument document, Stream stream, CancellationToken cancellationToken)
         {
-            DocumentGenerator.GeneratePdf(stream, document);
+            DocumentGenerator.GeneratePdf(stream, document, cancellationToken);
         }
         
         private static int GenerateAndShowCounter = 0;
