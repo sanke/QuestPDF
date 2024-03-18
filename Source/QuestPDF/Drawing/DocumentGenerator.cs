@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using QuestPDF.Drawing.Exceptions;
 using QuestPDF.Drawing.Proxy;
 using QuestPDF.Elements;
@@ -20,26 +21,26 @@ namespace QuestPDF.Drawing
             NativeDependencyCompatibilityChecker.Test();
         }
         
-        internal static void GeneratePdf(SkWriteStream stream, IDocument document)
+        internal static void GeneratePdf(SkWriteStream stream, IDocument document, CancellationToken cancellationToken)
         {
             ValidateLicense();
             
             var metadata = document.GetMetadata();
             var settings = document.GetSettings();
             var canvas = new PdfCanvas(stream, metadata, settings);
-            RenderDocument(canvas, document, settings);
+            RenderDocument(canvas, document, settings, cancellationToken);
         }
         
-        internal static void GenerateXps(SkWriteStream stream, IDocument document)
+        internal static void GenerateXps(SkWriteStream stream, IDocument document, CancellationToken cancellationToken = default)
         {
             ValidateLicense();
             
             var settings = document.GetSettings();
             var canvas = new XpsCanvas(stream, settings);
-            RenderDocument(canvas, document, settings);
+            RenderDocument(canvas, document, settings, cancellationToken);
         }
         
-        internal static ICollection<byte[]> GenerateImages(IDocument document, ImageGenerationSettings imageGenerationSettings)
+        internal static ICollection<byte[]> GenerateImages(IDocument document, ImageGenerationSettings imageGenerationSettings, CancellationToken cancellationToken)
         {
             ValidateLicense();
             
@@ -47,7 +48,7 @@ namespace QuestPDF.Drawing
             documentSettings.ImageRasterDpi = imageGenerationSettings.RasterDpi;
             
             var canvas = new ImageCanvas(imageGenerationSettings);
-            RenderDocument(canvas, document, documentSettings);
+            RenderDocument(canvas, document, documentSettings, cancellationToken);
 
             return canvas.Images;
         }
@@ -77,27 +78,29 @@ namespace QuestPDF.Drawing
             };
         }
 
-        internal static PreviewerDocumentSnapshot GeneratePreviewerContent(IDocument document)
+        internal static PreviewerDocumentSnapshot GeneratePreviewerContent(IDocument document, CancellationToken cancellationToken = default)
         {
             var canvas = new PreviewerCanvas();
-            RenderDocument(canvas, document, DocumentSettings.Default);
+            RenderDocument(canvas, document, DocumentSettings.Default, cancellationToken);
             return canvas.GetContent();
         }
         
-        private static void RenderDocument<TCanvas>(TCanvas canvas, IDocument document, DocumentSettings settings) where TCanvas : ICanvas, IRenderingCanvas
+        private static void RenderDocument<TCanvas>(TCanvas canvas, IDocument document, DocumentSettings settings,
+            CancellationToken cancellationToken) where TCanvas : ICanvas, IRenderingCanvas
         {
             canvas.BeginDocument();
             
             if (document is MergedDocument mergedDocument)
-                RenderMergedDocument(canvas, mergedDocument, settings);
+                RenderMergedDocument(canvas, mergedDocument, settings, cancellationToken);
             
             else
-                RenderSingleDocument(canvas, document, settings);
+                RenderSingleDocument(canvas, document, settings, cancellationToken);
             
             canvas.EndDocument();
         }
 
-        private static void RenderSingleDocument<TCanvas>(TCanvas canvas, IDocument document, DocumentSettings settings)
+        private static void RenderSingleDocument<TCanvas>(TCanvas canvas, IDocument document, DocumentSettings settings,
+            CancellationToken cancellationToken)
             where TCanvas : ICanvas, IRenderingCanvas
         {
             var useOriginalImages = canvas is ImageCanvas;
@@ -105,12 +108,13 @@ namespace QuestPDF.Drawing
             var content = ConfigureContent(document, settings, useOriginalImages);
 
             var pageContext = new PageContext();
-            RenderPass(pageContext, new FreeCanvas(), content);
+            RenderPass(pageContext, new FreeCanvas(), content, cancellationToken);
             pageContext.ProceedToNextRenderingPhase();
-            RenderPass(pageContext, canvas, content);
+            RenderPass(pageContext, canvas, content, cancellationToken);
         }
         
-        private static void RenderMergedDocument<TCanvas>(TCanvas canvas, MergedDocument document, DocumentSettings settings)
+        private static void RenderMergedDocument<TCanvas>(TCanvas canvas, MergedDocument document,
+            DocumentSettings settings, CancellationToken cancellationToken)
             where TCanvas : ICanvas, IRenderingCanvas
         {
             var useOriginalImages = canvas is ImageCanvas;
@@ -131,7 +135,7 @@ namespace QuestPDF.Drawing
                 foreach (var documentPart in documentParts)
                 {
                     documentPageContext.SetDocumentId(documentPart.DocumentId);
-                    RenderPass(documentPageContext, new FreeCanvas(), documentPart.Content);
+                    RenderPass(documentPageContext, new FreeCanvas(), documentPart.Content, cancellationToken);
                 }
                 
                 documentPageContext.ProceedToNextRenderingPhase();
@@ -139,7 +143,7 @@ namespace QuestPDF.Drawing
                 foreach (var documentPart in documentParts)
                 {
                     documentPageContext.SetDocumentId(documentPart.DocumentId);
-                    RenderPass(documentPageContext, canvas, documentPart.Content);   
+                    RenderPass(documentPageContext, canvas, documentPart.Content, cancellationToken);   
                 }
             }
             else
@@ -149,9 +153,9 @@ namespace QuestPDF.Drawing
                     var pageContext = new PageContext();
                     pageContext.SetDocumentId(documentPart.DocumentId);
                     
-                    RenderPass(pageContext, new FreeCanvas(), documentPart.Content);
+                    RenderPass(pageContext, new FreeCanvas(), documentPart.Content, cancellationToken);
                     pageContext.ProceedToNextRenderingPhase();
-                    RenderPass(pageContext, canvas, documentPart.Content);
+                    RenderPass(pageContext, canvas, documentPart.Content, cancellationToken);
                 }
             }
         }
@@ -173,13 +177,14 @@ namespace QuestPDF.Drawing
             return content;
         }
 
-        private static void RenderPass<TCanvas>(PageContext pageContext, TCanvas canvas, ContainerElement content)
+        private static void RenderPass<TCanvas>(PageContext pageContext, TCanvas canvas, ContainerElement content,
+            CancellationToken cancellationToken)
             where TCanvas : ICanvas, IRenderingCanvas
         {
             content.InjectDependencies(pageContext, canvas);
             content.VisitChildren(x => (x as IStateResettable)?.ResetState());
 
-            while(true)
+            while(!cancellationToken.IsCancellationRequested)
             {
                 pageContext.IncrementPageNumber();
                 var spacePlan = content.Measure(Size.Max);
@@ -214,6 +219,8 @@ namespace QuestPDF.Drawing
                 if (spacePlan.Type == SpacePlanType.FullRender)
                     break;
             }
+            
+            cancellationToken.ThrowIfCancellationRequested();
 
             void ApplyLayoutDebugging()
             {
@@ -230,7 +237,7 @@ namespace QuestPDF.Drawing
 
                 content.RemoveExistingProxies();
             }
-            
+                
             void ThrowLayoutException()
             {
                 var newLine = Environment.NewLine;

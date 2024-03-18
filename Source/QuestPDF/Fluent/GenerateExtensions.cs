@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using QuestPDF.Drawing;
 using QuestPDF.Infrastructure;
 using QuestPDF.Skia;
@@ -13,10 +14,10 @@ namespace QuestPDF.Fluent
         /// <summary>
         /// Generates the document in PDF format and returns it as a byte array.
         /// </summary>
-        public static byte[] GeneratePdf(this IDocument document)
+        public static byte[] GeneratePdf(this IDocument document, CancellationToken cancellationToken = default)
         {
             using var stream = new SkWriteStream();
-            DocumentGenerator.GeneratePdf(stream, document);
+            DocumentGenerator.GeneratePdf(stream, document, cancellationToken);
             
             using var data = stream.DetachData();
             return data.ToBytes();
@@ -116,10 +117,11 @@ namespace QuestPDF.Fluent
         /// Generates the document as a series of images and returns them as a collection of byte arrays.
         /// </summary>
         /// <param name="settings">Optional settings to customize the generation process, such as image resolution, compression ratio, and more.</param>
-        public static IEnumerable<byte[]> GenerateImages(this IDocument document, ImageGenerationSettings? settings = null)
+        /// <param name="cancellationToken"></param>
+        public static IEnumerable<byte[]> GenerateImages(this IDocument document, ImageGenerationSettings? settings = null, CancellationToken cancellationToken = default)
         {
             settings ??= ImageGenerationSettings.Default;
-            return DocumentGenerator.GenerateImages(document, settings);
+            return DocumentGenerator.GenerateImages(document, settings, cancellationToken);
         }
 
         /// <param name="imageIndex">Specifies the index of the generated image from the document, starting at 0.</param>
