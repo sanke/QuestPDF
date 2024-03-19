@@ -26,9 +26,9 @@ namespace QuestPDF.Fluent
         /// <summary>
         /// Generates the document in PDF format and saves it to the specified file path.
         /// </summary>
-        public static void GeneratePdf(this IDocument document, string filePath)
+        public static void GeneratePdf(this IDocument document, string filePath, CancellationToken cancellationToken = default)
         {
-            var data = document.GeneratePdf();
+            var data = document.GeneratePdf(cancellationToken);
             
             if (File.Exists(filePath))
                 File.Delete(filePath);
@@ -39,9 +39,9 @@ namespace QuestPDF.Fluent
         /// <summary>
         /// Generates the document in PDF format and outputs it to a provided stream.
         /// </summary>
-        public static void GeneratePdf(this IDocument document, Stream stream)
+        public static void GeneratePdf(this IDocument document, Stream stream, CancellationToken cancellationToken = default)
         {
-            var data = document.GeneratePdf();
+            var data = document.GeneratePdf(cancellationToken);
             stream.Write(data, 0, data.Length);
         }
         
@@ -133,13 +133,13 @@ namespace QuestPDF.Fluent
         /// </summary>
         /// <param name="imagePathSource">A delegate that gets image index as an input, and returns file path where it should be saved.</param>
         /// <param name="settings">Optional settings for fine-tuning the generated images, such as resolution, compression ratio, etc.</param>
-        public static void GenerateImages(this IDocument document, GenerateDocumentImagePath imagePathSource, ImageGenerationSettings? settings = null)
+        public static void GenerateImages(this IDocument document, GenerateDocumentImagePath imagePathSource, ImageGenerationSettings? settings = null, CancellationToken cancellationToken = default)
         {
             settings ??= ImageGenerationSettings.Default;
             
             var index = 0;
 
-            foreach (var imageData in document.GenerateImages(settings))
+            foreach (var imageData in document.GenerateImages(settings, cancellationToken))
             {
                 var path = imagePathSource(index);
 
